@@ -9,6 +9,7 @@ RUN set -x && \
     KEPT_PACKAGES+=(psmisc) && \
     KEPT_PACKAGES+=(libnginx-mod-http-geoip) && \
     KEPT_PACKAGES+=(geoip-database) && \
+    KEPT_PACKAGES+=(goaccess) && \
     # added for debugging
     KEPT_PACKAGES+=(procps nano aptitude netcat libnginx-mod-http-echo) && \
 #
