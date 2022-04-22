@@ -83,12 +83,11 @@ then
     if [[ -n "$WP_GOACCESS" ]]
      then
      echo "[$APPNAME][$(date)] Adding neccesary entries for GoAccess"
-     echo "Adding neccesary entries for GoAccess"
-     printf "location /goaccesswebsocket {\n"
-     printf "proxy_pass http://127.0.0.1:7891;\n"
-     printf "proxy_http_version 1.1;\n"
-     printf "proxy_set_header Upgrade $http_upgrade;\n"
-     printf "proxy_set_header Connection "Upgrade";}\n"
+     printf "location /goaccesswebsocket {\n" >> /run/nginx/locations.conf
+     printf "    proxy_pass http://127.0.0.1:7891;\n" >> /run/nginx/locations.conf
+     printf "    proxy_http_version 1.1;\n" >> /run/nginx/locations.conf
+     printf "    proxy_set_header Upgrade \$http_upgrade;\n" >> /run/nginx/locations.conf
+     printf "    proxy_set_header Connection "Upgrade";}\n" >> /run/nginx/locations.conf
     fi
 
     # Finally add the default index files to this configuration:

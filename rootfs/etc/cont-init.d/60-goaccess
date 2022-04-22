@@ -1,0 +1,88 @@
+#!/usr/bin/with-contenv bash
+#shellcheck shell=bash
+
+APPNAME="$(hostname)/GoAccess-init"
+GEOIPDIR="/usr/share/GeoIP"
+NGINXCNF="/etc/nginx/nginx.conf"
+GAYEAR=$(date +%Y)
+GAMONTH=$(date +%m)
+echo "[$APPNAME][$(date)] Set up of GoAccess logfile analyser"
+
+#Nothing set up in the docker-compose.yml? Then abort
+if ! [[ -n "$WP_GOACCESS" ]]
+then
+ echo "[$APPNAME][$(date)] WP_GOACCESS not set in docker-compose.yml. Aborting.."
+ exit 0
+fi
+
+# create GeoIP directory
+mkdir -p $GEOIPDIR
+
+#create persistent backup directory
+mkdir -p /run/nginx/.geoip
+
+#delete old cached files
+if [[ -f /run/nginx/.geoip/GAGeoIP.bckup ]];
+ then
+  if [ "$(( $(date +"%s") - $(stat -c "%Y" /run/nginx/.geoip/GAGeoIP.bckup) ))" -gt "604800" ]
+   then
+    echo "[$APPNAME][$(date)] Found DB Backup which is older than 1 week. Deleting"
+    rm -f /run/nginx/.geoip/dbip-country-lite.gz
+    rm -f /run/nginx/.geoip/GAGeoIP.bckup
+  fi
+fi
+
+#Do we still have a usable backup after deletion? Then use it
+if [[ -f /run/nginx/.geoip/dbip-country-lite.gz ]]
+ then
+  gabackupworks=true
+  echo "[$APPNAME][$(date)] Found a GeoIP DB backup, installing"
+  [[ -f /run/nginx/.geoip/dbip-country-lite.gz ]] && cp /run/nginx/.geoip/dbip-country-lite.gz /"$GEOIPDIR"
+ else gabackupworks=false
+ echo "[$APPNAME][$(date)] No Backup found, continue"
+fi
+
+
+#Get the GeoIP databases from db-ip.com
+if [[ "$gabackupworks" == "false" ]]
+ then
+  gageoipfail=false
+  ! curl --fail -sL -o "$GEOIPDIR"/dbip-country-lite.gz https://download.db-ip.com/free/dbip-country-lite-$GAYEAR-$GAMONTH.mmdb.gz && gageoipfail=true || true
+  if [[ "$gageoipfail" == "false" ]]
+  then
+  echo "[$APPNAME][$(date)] Successfully downloaded GeoIP DB for $GAYEAR-$GAMONTH from db-ip.com"
+  fi
+fi
+
+#Backup the GeoIP DB to /run/nginx/.geoip/ and create a file as timestamp
+if [[ "$gabackupworks" == "false" ]] && [[ "$gageoipfail" == "false" ]]
+then
+echo "[$APPNAME][$(date)] Backup GeoIP DB to /run/nginx/.geoip"
+  cp "$GEOIPDIR"/dbip-country-lite.gz /run/nginx/.geoip
+  touch /run/nginx/.geoip/GAGeoIP.bckup
+fi
+
+#If nothing of the above did work out, we just use what we got through apt install
+if [[ "$gageoipfail" == "true" ]] && [[ "$gabackupworks" == "false" ]]
+then
+  echo "[$APPNAME][$(date)] Couldn't retrieve the GeoIP databases. Dashboard will run without GeoIP support."
+fi
+
+#Now we need to unzip what we got - if we got any
+[[ -f "$GEOIPDIR"/dbip-country-lite.gz ]] && gunzip -f "$GEOIPDIR"/dbip-country-lite.gz && echo "[$APPNAME][$(date)] Unpacked downloaded DB"
+
+#Add logging to file to nginx.conf. We log to /tmp wich is set as tmpfs in docker-compose.
+sed -i '/^  access_log.*/a \ \ access_log /tmp/access.log;' $NGINXCNF
+touch /tmp/access.log
+
+#set up goaccess.conf
+cp /root/goaccess.conf /etc/goaccess/goaccess.conf
+
+#Adding a bit of clean-up to logrotate
+echo "[$APPNAME][$(date)] reconfigure nginx logrotate."
+rm /etc/logrotate.d/nginx
+cp /root/nginx.logrotate /etc/logrotate.d/nginx
+
+echo "[$APPNAME][$(date)] Finished setting up GoAccess."
+
+exit
